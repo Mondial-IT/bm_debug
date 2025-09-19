@@ -1,0 +1,9 @@
+services:
+  bm_debug.exception_subscriber:
+    class: Drupal\bm_main\EventSubscriber\BmExceptionSubscriber
+    arguments: ['@logger.channel.bm_debug']
+    tags:
+      - { name: event_subscriber }
+  logger.channel.bm_debug:
+    parent: logger.channel_base
+    arguments: ['bm_debug']
