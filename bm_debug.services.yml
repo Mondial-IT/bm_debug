@@ -1,9 +1,18 @@
+# web/modules/custom/bm_debug/bm_debug.services.yml
 services:
-  bm_debug.exception_subscriber:
-    class: Drupal\bm_main\EventSubscriber\BmExceptionSubscriber
-    arguments: ['@logger.channel.bm_debug']
+  bm_debug.request_id_subscriber:
+    class: 'Drupal\bm_debug\EventSubscriber\RequestIdSubscriber'
     tags:
-      - { name: event_subscriber }
+      - { name: 'event_subscriber' }
+
+  bm_debug.exception_subscriber:
+    class: 'Drupal\bm_debug\EventSubscriber\BmExceptionSubscriber'
+    arguments:
+      - '@logger.channel.bm_debug'
+      - '@current_user'
+    tags:
+      - { name: 'event_subscriber' }
+
   logger.channel.bm_debug:
-    parent: logger.channel_base
+    parent: 'logger.channel_base'
     arguments: ['bm_debug']

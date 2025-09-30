@@ -1,3 +1,15 @@
 # bm_debug
 
-Path: D:\Drupal_Dev\drupal11_vps01_lam_acc\docker_volume_app\git_root\web\modules\custom\bm_debug
+Path: \modules\custom\bm_debug
+
+## Overview
+  The **Blue Marloc Debug** module provides an exception
+  event catcher to handle some exceptions more gracefully.
+
+## Features
+
+* exception handler which logs 'module not found' exceptions.
+
+## Usage
+
+* enable. It has no further usage. It logs module not found to the log.
