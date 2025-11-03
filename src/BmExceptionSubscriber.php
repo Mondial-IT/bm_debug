@@ -1,6 +1,6 @@
 <?php
 
-namespace Drupal\bm_debug\EventSubscriber;
+namespace Drupal\bm_debug;
 
 use Drupal\Core\Extension\Exception\UnknownExtensionException;
 use Psr\Log\LoggerInterface;
