@@ -14,7 +14,7 @@
     },
     "autoload": {
         "psr-4": {
-            "Drupal\\bm_main\\": "src/"
+            "Drupal\\bm_debug\\": "src/"
         }
     },
     "extra": {
