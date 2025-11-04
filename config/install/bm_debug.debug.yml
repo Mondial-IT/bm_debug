@@ -1,0 +1,6 @@
+debug:
+  state: false
+  description: 'Switch debugging bm_debug on/off'
+form:
+  state: false
+  description: 'show debug info for the form'

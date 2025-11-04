@@ -1,0 +1,6 @@
+name: Blue Marloc debug
+type: module
+description: The debug api, centralised management of debugging.
+package: bluemarloc
+core_version_requirement: ^10 || ^11
+php: ^8.1

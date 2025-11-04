@@ -1,0 +1,6 @@
+bm_debug.settings_form:
+  title: 'Debug admin'
+  description: 'Configure bm_debug.'
+  parent: bm_main.bluemarloc_developer
+  route_name: bm_debug.settings_form
+  weight: 10

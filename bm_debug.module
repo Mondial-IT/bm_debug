@@ -1,0 +1,221 @@
+<?php
+
+
+use Drupal\bm_debug\BMDebugInfo\BMDebugInfo;
+use Drupal\Core\Messenger\MessengerInterface;
+use Drupal\Core\Render\Markup;
+use Drupal\Core\Routing\RouteMatchInterface;
+
+function bm_debug_page_attachments(array &$page): void {
+  // Check if the user ID is 1 and the admin theme is active.
+  if (\Drupal::currentUser()->id() == 1 /*&& \Drupal::theme()->getActiveTheme()->getName() === 'seven'*/) {
+
+    $page['#attached']['library'][] = 'bm_debug/bm_debug';
+  }
+}
+
+/** @noinspection PhpUnused */
+function bm_debug_help($route_name, RouteMatchInterface $route_match): bool|\Drupal\Core\StringTranslation\TranslatableMarkup {
+  if ($route_name == 'help.page.bm_debug') {
+    return t('
+<h2>Debugging support voor BlueMarloc.</h2>
+<h3>Instructions</h3>
+    <p>function `bm_d($key, $var, $title, \'screen\'|\'log\'|\'dsm\');</p>
+    <p>Where $key is one of the keys published by a module. See bm_debug settings form.</p>
+    <p>$var the variable, $title the title, and choice where to display it.</p>
+
+ <h4>Adding new modules:</h4>
+ <p>
+ <ul>
+ <li>Add in .services.yml the even subscriber</li>
+ <li>Add the DebugInfoEventSubscriber.php</li>
+ <li>Add a number of keys to use in debugging in the subscriber class</li>
+ <li>use bm_d() in your code</li>
+ <li>Add dependency bm_debug in the .info.yml</li>
+ </ul></p>');
+  }
+  return FALSE;
+}
+
+function bm_debug_getCallingClassName() {
+  $traces = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
+  foreach ($traces as $trace) {
+    if (isset($trace['class'])) {
+      return $trace['class'];
+    }
+  }
+  return NULL; // If class name is not found
+}
+
+
+
+
+/**
+ * @param $key            string name|'*' optional key name originated, which can be enabled in session to show debug
+ *                        info
+ * @param $var            mixed variable
+ * @param $text           string the explanation text
+ * @param $screen_dsm_log string dsm, screen or log given in function call, if not given default is used, or set on
+ *                        debug form
+ *
+ * @return void
+ */
+function bm_d(string $key, mixed $var = '', string $text = '', ?string $screen_dsm_log = NULL): void {
+ // Drupal::messenger()->addMessage("bm_d debug.module: [" . $key . ']', MessengerInterface::TYPE_STATUS);
+
+//  if (Drupal::currentUser()->id() !== (int) 1) {
+//    dsm('its not you');
+//    return;
+//  }
+
+  $keyEmpty = strlen($key) === 0;
+
+
+  // Drupal::messenger()->addMessage('bm_d debug.module: keyEmpty [' . $keyEmpty . ']', MessengerInterface::TYPE_STATUS);
+
+
+  //$_SESSION['bm_debug']=[];
+  // load from cache, set in session to 0 or dsm|screen|log
+  if (!$keyEmpty) {  // "" means, don't need a key, always screen
+    if (!array_key_exists('bm_debug', $_SESSION)) {
+      $cachedDebugs = Drupal::cache('bluemarloc')->get('BMDebug');
+
+      if ($cachedDebugs) {
+        foreach ($cachedDebugs->data as $dbgInfo) {
+          $_SESSION['bm_debug'] = [$dbgInfo->key => NULL];
+          $_SESSION['bm_debug'][$dbgInfo->key] = $dbgInfo->default ? $dbgInfo->screen_dsm_log : 0;
+        }
+      }
+      else {
+        $_SESSION['bm_debug'] = [];
+      }
+    }
+
+    // first time we see this bm_d call? in this session, then get and cache info
+    if (!array_key_exists($key, $_SESSION['bm_debug'])) {
+      $default = 0;
+      $dbgInfo = new BMDebugInfo();
+      $dbgInfo->key = $key;
+      // who can we call for info
+      $className = bm_debug_getCallingClassName();
+      $methodName = 'bm_d_callback';
+      $arguments = [$key, $dbgInfo];
+      if (class_exists($className) && method_exists($className, $methodName)) {
+        $dbgInfo = call_user_func_array([$className, $methodName], $arguments);
+        if (!$dbgInfo) {
+          Drupal::messenger()->addMessage("something wrong with $className $methodName (not found?)", MessengerInterface::TYPE_WARNING);
+          return;
+        }
+        //dsm($dbgInfo, 'received from callback');
+        $cachedDebugs = Drupal::cache('bluemarloc')->get('BMDebug');
+        if ($cachedDebugs) {
+          $cachedDebugs->data[$key] = $dbgInfo;
+          Drupal::cache('bluemarloc')->set('BMDebug', $cachedDebugs->data);
+        }
+        else {
+          Drupal::cache('bluemarloc')->set('BMDebug', [$dbgInfo]);
+        }
+        if ($dbgInfo->default) {
+          $default = $dbgInfo->screen_log_dsm;
+        }
+      }
+      //dsm($_SESSION['bm_debug'],'added');
+      // when not found, it is available by default.
+      $_SESSION['bm_debug'][$key] = $default;
+    }
+  }
+
+
+  if ($keyEmpty || (isset($_SESSION['bm_debug'][$key]) && $_SESSION['bm_debug'][$key] !== 0)) {
+
+    if ($keyEmpty) {
+      if (!$screen_dsm_log) {
+        $screen_dsm_log = 'screen';
+      }
+    }
+
+    if (!$screen_dsm_log) {
+      $screen_dsm_log = $_SESSION['bm_debug'][$key];
+    }
+
+    $trace = debug_backtrace();
+    // dsm($trace);
+    $trace0 = $trace[0];
+    $path = explode('/', $trace0['file']);
+    $file = array_slice($path, -4);
+    $line = $trace0['line'];
+    //if($line=='655')dsm($trace);
+    $function = $trace[1]['function'] ?? '';
+    $prettyTrace = '<div style="font-size:12px;">file:' . implode('/', $file) . ' function:' . $function . ' line:' . $line . '</div> ';
+    //    $text=$text.$prettyTrace;
+
+    if ($screen_dsm_log === 'screen') {
+      //  $prepend =explode('\\',$key);
+      //  $prepend =$prepend[2]??'';
+      $message = '<div><span class="fgcolor-purple" style="font-weight:bold;font-size:12px;">' . $line . ' ' . $text . ':</span> ' . print_r($var, TRUE) . '<div class="bmd-trace">' . $prettyTrace . '</div></div>';
+      $message = Markup::create($message);
+      Drupal::messenger()->addMessage($message, MessengerInterface::TYPE_STATUS, TRUE);
+    }
+
+    if ($screen_dsm_log === 'dsm') {
+      if (function_exists('dsm')) {
+        $prepend = explode('\\', $key);
+        $prepend = array_pop($prepend);
+        dsm($var, '<div><span class="fgcolor-purple" style="font-weight:bold;font-size:12px;">' . $line . ' ' . $text . '</span><div class="bmd-trace">' . $prettyTrace . '</div></div>');
+      }
+      else {
+        Drupal::messenger()->addMessage($text . ': ' . print_r($var, TRUE), MessengerInterface::TYPE_STATUS, TRUE);
+      }
+    }
+
+    if ($screen_dsm_log === 'log') {
+      $k = explode("\\", $key);
+      $k = array_pop($k);
+      Drupal::logger($k)
+        ->debug($line . ' ' . $text . ' :var', [':var' => json_encode($var)]);
+    }
+  }
+
+
+}
+
+function bm_d1($var, $text): void {
+  Drupal::messenger()->addMessage($text . ': ' . print_r($var, TRUE));
+}
+
+function bm_d_log_always($key, $var, $text): void {
+  $k = explode("\\", $key);
+  $k = array_pop($k);
+  Drupal::logger($k)
+    ->debug($text . ' :var', [':var' => json_encode($var)]);
+}
+
+/**
+ * debugging the recursive call of term 262 error
+ *
+ * @param array $build
+ * @param \Drupal\Core\Entity\EntityInterface $entity
+ * @param \Drupal\Core\Entity\Display\EntityViewDisplayInterface $display
+ * @param $view_mode
+ *
+ * @return void
+ */
+function bm_debug_entity_view(array &$build, \Drupal\Core\Entity\EntityInterface $entity, \Drupal\Core\Entity\Display\EntityViewDisplayInterface $display, $view_mode) {
+  if ($entity->getEntityTypeId() == 'taxonomy_term' && $entity->id() == 262) {
+    $render_stack = &drupal_static(__FUNCTION__ . '_stack', []);
+
+    // Check if the term is already being rendered
+    if (in_array($entity->id(), $render_stack)) {
+      \Drupal::logger('my_module')->notice('Recursive rendering detected for taxonomy_term ' . $entity->id());
+    } else {
+      // Add the term to the stack
+      $render_stack[] = $entity->id();
+
+      // Render the entity (or perform the rendering process)
+      // Note: Replace this comment with the actual rendering code or call
+
+      // Remove the term from the stack
+      array_pop($render_stack);
+    }
+  }
+}

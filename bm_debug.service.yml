@@ -1,0 +1,5 @@
+services:
+  bm_debug.event_subscriber:
+    class: Drupal\bm_debug\EventSubscriber\DebugInfoEventSubscriber
+    tags:
+      - { name: event_subscriber }

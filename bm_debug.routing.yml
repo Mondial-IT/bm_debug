@@ -1,0 +1,7 @@
+bm_debug.settings_form:
+  path: '/admin/config/system/bm-debug'
+  defaults:
+    _title: 'bm_debug settings'
+    _form: 'Drupal\bm_debug\Form\SettingsForm'
+  requirements:
+    _permission: 'administer bm_debug configuration'

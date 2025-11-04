@@ -1,0 +1,10 @@
+# Custom module library for general purposes.
+bm_debug:
+  js:
+    js/bm-debug.js: {}
+  css:
+    component:
+      css/bm-debug.css: {}
+  dependencies:
+    - core/drupalSettings
+    - bm_main/bm_main
