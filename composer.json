@@ -1,6 +1,6 @@
 {
-    "name": "bluemarloc/bm_debug",
-    "description": "Blue Marloc debugging tools.",
+    "name": "mondial-it/bm_debug",
+    "description": "Blue Marloc debugging tools. Dit is de beperkte d11 versie, zie branch voor de d9 versie.",
     "type": "drupal-custom-module",
     "license": "proprietary",
     "authors": [
