@@ -1,6 +1,6 @@
-name: Blue Marloc debug
+name: Mondial-IT Debug Module
 type: module
-description: The debug api, centralised management of debugging.
-package: bluemarloc
+description: Debug api with centralised management of debugging. bm_d which can be selectively enabled and disabled from the gui.
+package: Mondial-IT
 core_version_requirement: ^10 || ^11
 php: ^8.1

@@ -15,26 +15,33 @@ function bm_debug_page_attachments(array &$page): void {
 }
 
 /** @noinspection PhpUnused */
-function bm_debug_help($route_name, RouteMatchInterface $route_match): bool|\Drupal\Core\StringTranslation\TranslatableMarkup {
+function bm_debug_help($route_name, RouteMatchInterface $route_match): string {
   if ($route_name == 'help.page.bm_debug') {
-    return t('
-<h2>Debugging support voor BlueMarloc.</h2>
-<h3>Instructions</h3>
-    <p>function `bm_d($key, $var, $title, \'screen\'|\'log\'|\'dsm\');</p>
-    <p>Where $key is one of the keys published by a module. See bm_debug settings form.</p>
-    <p>$var the variable, $title the title, and choice where to display it.</p>
+    $output = '<h2>' . t('Mondial-IT Debug Module') . '</h2>';
+    $output .= '<p>' . t('Provides the <code>bm_d()</code> helper, event subscribers, and UI controls to centrally enable/disable debug output per key.') . '</p>';
 
- <h4>Adding new modules:</h4>
- <p>
- <ul>
- <li>Add in .services.yml the even subscriber</li>
- <li>Add the DebugInfoEventSubscriber.php</li>
- <li>Add a number of keys to use in debugging in the subscriber class</li>
- <li>use bm_d() in your code</li>
- <li>Add dependency bm_debug in the .info.yml</li>
- </ul></p>');
+    $output .= '<h3>' . t('Menus') . '</h3><ul>';
+    $output .= '<li>' . t('<strong>Debug admin</strong> — appears under Blue Marloc » Development and opens the configuration form.') . '</li>';
+    $output .= '</ul>';
+
+    $output .= '<h3>' . t('URIs') . '</h3><ul>';
+    $output .= '<li>' . t('<code>@uri</code> (<code>@route</code>) — Configure debug keys, defaults, and the bm_d output channel.', [
+      '@uri' => '/admin/config/system/bm-debug',
+      '@route' => 'bm_debug.settings_form',
+    ]) . '</li>';
+    $output .= '</ul>';
+
+    $output .= '<h3>' . t('Usage') . '</h3>';
+    $output .= '<p>' . t('Call <code>bm_d($key, $var, $title, $channel)</code> where <code>$channel</code> is <code>screen</code>, <code>log</code>, or <code>dsm</code>. Keys must be declared via a <code>BMDebugInfo</code> subscriber so they appear on the settings form.') . '</p>';
+    $output .= '<ul>';
+    $output .= '<li>' . t('Register the event subscriber in <code>.services.yml</code>.') . '</li>';
+    $output .= '<li>' . t('Create <code>DebugInfoEventSubscriber.php</code> and publish available keys.') . '</li>';
+    $output .= '<li>' . t('Use <code>bm_d()</code> in your code and add a <code>bm_debug</code> dependency in the module info file.') . '</li>';
+    $output .= '</ul>';
+
+    return $output;
   }
-  return FALSE;
+  return '';
 }
 
 function bm_debug_getCallingClassName() {
