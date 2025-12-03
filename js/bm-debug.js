@@ -9,7 +9,7 @@ console.log('%c BMDebug: %c BMDebug.js is running Ok  ', BM.log.color1, BM.log.c
 (function (Drupal) {
   Drupal.behaviors.bm_debug = {
     attach: function (context, settings) {
-      console.log("%cbm_debug %c is running", BM.log.color1, BM.log.color2)
+      console.log("%c bm_debug %c is running", BM.log.color1, BM.log.color2)
       if (window.BM['BMDebug']) {
         window.BM.BMDebug.cleanUp()
       }
