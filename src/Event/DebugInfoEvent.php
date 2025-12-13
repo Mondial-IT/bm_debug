@@ -11,6 +11,7 @@ use Drupal;
 use Drupal\bm_debug\BMDebugInfo\BMDebugInfo;
 use stdClass;
 use Symfony\Contracts\EventDispatcher\Event;
+use function bm_debug_cache;
 
 /**
  * Custom event for BM Debug module.
@@ -28,7 +29,7 @@ class DebugInfoEvent extends Event {
 
   public function getData(): array {
     // these debugs are set in bm_d() function see .module
-    $cachedDebugs = Drupal::cache('bluemarloc')->get('BMDebug');
+    $cachedDebugs = bm_debug_cache()->get('BMDebug');
     //dsm($cachedDebugs, 'getData');
     if ($cachedDebugs) {
       $cachedDebugsData = $cachedDebugs->data;

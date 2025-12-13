@@ -1,6 +1,8 @@
-name: Mondial-IT Debug Module
+name: Mondial-IT Debug
 type: module
-description: Debug api with centralised management of debugging. bm_d which can be selectively enabled and disabled from the gui.
+description: Debug api with centralised management of debugging. `bm_d` instruction, which can be selectively enabled and disabled from the GUI.
 package: Mondial-IT
 core_version_requirement: ^10 || ^11
 php: ^8.1
+dependencies:
+  - bm_main:bm_main

@@ -5,6 +5,7 @@ use Drupal\bm_debug\BMDebugInfo\BMDebugInfo;
 use Drupal\Core\Messenger\MessengerInterface;
 use Drupal\Core\Render\Markup;
 use Drupal\Core\Routing\RouteMatchInterface;
+use Drupal\Core\StringTranslation\TranslatableMarkup;
 
 function bm_debug_page_attachments(array &$page): void {
   // Check if the user ID is 1 and the admin theme is active.
@@ -12,6 +13,27 @@ function bm_debug_page_attachments(array &$page): void {
 
     $page['#attached']['library'][] = 'bm_debug/bm_debug';
   }
+}
+
+/**
+ * Returns the Blue Marloc cache bin or a safe fallback.
+ */
+function bm_debug_cache(): \Drupal\Core\Cache\CacheBackendInterface {
+  static $fallbackNotified = FALSE;
+  $moduleHandler = \Drupal::moduleHandler();
+  $container = \Drupal::getContainer();
+
+  if ($moduleHandler->moduleExists('bm_cache') && $container->has('cache.bluemarloc')) {
+    return \Drupal::cache('bluemarloc');
+  }
+
+  if (!$fallbackNotified && \Drupal::currentUser()->hasPermission('administer site configuration')) {
+    $fallbackNotified = TRUE;
+    $message = new TranslatableMarkup('Enable the Blue Marloc Cache module (bm_cache) to use the dedicated cache bin. Falling back to the default cache.');
+    \Drupal::messenger()->addWarning($message);
+  }
+
+  return \Drupal::cache();
 }
 
 /** @noinspection PhpUnused */
@@ -85,7 +107,7 @@ function bm_d(string $key, mixed $var = '', string $text = '', ?string $screen_d
   // load from cache, set in session to 0 or dsm|screen|log
   if (!$keyEmpty) {  // "" means, don't need a key, always screen
     if (!array_key_exists('bm_debug', $_SESSION)) {
-      $cachedDebugs = Drupal::cache('bluemarloc')->get('BMDebug');
+      $cachedDebugs = bm_debug_cache()->get('BMDebug');
 
       if ($cachedDebugs) {
         foreach ($cachedDebugs->data as $dbgInfo) {
@@ -114,13 +136,14 @@ function bm_d(string $key, mixed $var = '', string $text = '', ?string $screen_d
           return;
         }
         //dsm($dbgInfo, 'received from callback');
-        $cachedDebugs = Drupal::cache('bluemarloc')->get('BMDebug');
+        $cache = bm_debug_cache();
+        $cachedDebugs = $cache->get('BMDebug');
         if ($cachedDebugs) {
           $cachedDebugs->data[$key] = $dbgInfo;
-          Drupal::cache('bluemarloc')->set('BMDebug', $cachedDebugs->data);
+          $cache->set('BMDebug', $cachedDebugs->data);
         }
         else {
-          Drupal::cache('bluemarloc')->set('BMDebug', [$dbgInfo]);
+          $cache->set('BMDebug', [$dbgInfo]);
         }
         if ($dbgInfo->default) {
           $default = $dbgInfo->screen_log_dsm;
