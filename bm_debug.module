@@ -182,7 +182,7 @@ function bm_d(string $key, mixed $var = '', string $text = '', ?string $screen_d
     if ($screen_dsm_log === 'screen') {
       //  $prepend =explode('\\',$key);
       //  $prepend =$prepend[2]??'';
-      $message = '<div><span class="fgcolor-purple" style="font-weight:bold;font-size:12px;">' . $line . ' ' . $text . ':</span> ' . print_r($var, TRUE) . '<div class="bmd-trace">' . $prettyTrace . '</div></div>';
+      $message = '<div class="bm-debug-message"><span class="fgcolor-purple" style="font-weight:bold;font-size:12px;">' . $line . ' ' . $text . ':</span> ' . print_r($var, TRUE) . '<div class="bmd-trace">' . $prettyTrace . '</div></div>';
       $message = Markup::create($message);
       Drupal::messenger()->addMessage($message, MessengerInterface::TYPE_STATUS, TRUE);
     }
@@ -191,7 +191,7 @@ function bm_d(string $key, mixed $var = '', string $text = '', ?string $screen_d
       if (function_exists('dsm')) {
         $prepend = explode('\\', $key);
         $prepend = array_pop($prepend);
-        dsm($var, '<div><span class="fgcolor-purple" style="font-weight:bold;font-size:12px;">' . $line . ' ' . $text . '</span><div class="bmd-trace">' . $prettyTrace . '</div></div>');
+        dsm($var, '<div class="bm-debug-message"><span class="fgcolor-purple" style="font-weight:bold;font-size:12px;">' . $line . ' ' . $text . '</span><div class="bmd-trace">' . $prettyTrace . '</div></div>');
       }
       else {
         Drupal::messenger()->addMessage($text . ': ' . print_r($var, TRUE), MessengerInterface::TYPE_STATUS, TRUE);

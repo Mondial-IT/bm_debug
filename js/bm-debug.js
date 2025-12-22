@@ -33,7 +33,7 @@ class BMDebug {
         }
       }
     )
-    document.querySelectorAll('li.messages__item').forEach((item) => {
+    document.querySelectorAll('.alert').forEach((item) => {
         removeCharactersFromTextNodes(item, / => /g);
       }
     )
@@ -83,6 +83,8 @@ window.addEventListener('error', function (event) {
   let message = parseBrokenKint(event.message);
 
   // Format the error message
+  let stack="";
+  if(event.error)stack=event.error.stack;
   const errorMessage = `
         <h2>Blue Marloc detected an error</h2>
         <p><strong>Message:</strong> ${message}</p>
@@ -90,7 +92,7 @@ window.addEventListener('error', function (event) {
         <p><strong>File:</strong> ${event.filename}</p>
         <p><strong>Line:</strong> ${event.lineno}</p>
         <p><strong>Column:</strong> ${event.colno}</p>
-        <p><details><summary></summary>${event.error.stack}</details></p>
+        <p><details><summary></summary>${stack}</details></p>
 
     `;
 

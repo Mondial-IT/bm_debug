@@ -5,12 +5,14 @@
  */
 
 pre{
-  margin:10px 0 0 0!important;
+  margin:-5px 0 0 0!important;
 }
 .bmd-trace{
   display:none;
 }
-li.messages__item:hover .bmd-trace{
+li.messages__item:hover .bmd-trace,/* drupal 9 */
+[data-drupal-messages] .bm-debug-message:hover .bmd-trace /* drupal 11 */
+{
   display:block;
   cursor:pointer;
   position: fixed;
