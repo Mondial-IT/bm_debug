@@ -1,202 +1,297 @@
 /*
- * Copyright (c) Mondial-IT BV - Blue Marloc 2024
- *   Created on 2024-11-21 at 11:32:11
+ * Copyright (c) Mondial-IT BV - Blue Marloc 2025
+ *   Created on 2025-12-23 at 12:12:12
  */
 
-console.log('%c BMDebug: %c BMDebug.js is running Ok  ', BM.log.color1, BM.log.color2);
+/* global Drupal, once, drupalSettings */
 
+(function (Drupal, once, drupalSettings) {
+  'use strict';
 
-(function (Drupal) {
-  Drupal.behaviors.bm_debug = {
-    attach: function (context, settings) {
-      console.log("%c bm_debug %c is running", BM.log.color1, BM.log.color2)
-      if (window.BM['BMDebug']) {
-        window.BM.BMDebug.cleanUp()
-      }
+  const BM_DEBUG_DEFAULTS = {
+    enabled: true,
+    overlay: true,
+    capture: {
+      windowError: true,
+      unhandledRejection: true,
+      drupalAjax: true,
+      xhr: true,
+      fetch: true,
+    },
+    noisyPatterns: [
+      'AbortError',
+      'The operation was aborted',
+      'NetworkError when attempting to fetch resource',
+      'Load timeout for modules',
+    ],
+    maxErrors: 50,
+    trace: {
+      enabled: true,
+      maxFrames: 20,
+      includeArgs: false,
+    },
+    cleanup: {
+      enabled: true,
+      kint: true,
     }
   };
-})(Drupal);
 
-class BMDebug {
-
-  constructor() {
-
-    setTimeout(this.cleanUp, 2000)
+  function deepMerge(target, source) {
+    if (!source) return target;
+    for (const key of Object.keys(source)) {
+      if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+        target[key] = deepMerge(target[key] || {}, source[key]);
+      } else {
+        target[key] = source[key];
+      }
+    }
+    return target;
   }
 
-  // removes "$message string (33) "---temporary-fix-see-issue-252---""
-  cleanUp() {
+  function getConfig() {
+    const fromSettings = drupalSettings?.bm_debug || {};
+    const cfg = deepMerge(JSON.parse(JSON.stringify(BM_DEBUG_DEFAULTS)), fromSettings);
+    try {
+      const ls = localStorage.getItem('bm_debug');
+      if (ls) deepMerge(cfg, JSON.parse(ls));
+    } catch (e) {}
+    cfg.enabled = !!cfg.enabled;
+    cfg.overlay = !!cfg.overlay;
+    return cfg;
+  }
 
-    document.querySelectorAll('dt').forEach(el => {
-        if (el.innerHTML.indexOf('---temporary') !== -1) {
-          el.classList.add('displaynone')
-        }
-      }
-    )
-    document.querySelectorAll('.alert').forEach((item) => {
-        removeCharactersFromTextNodes(item, / => /g);
-      }
-    )
-    const kintRichDivs = document.querySelectorAll(".kint-rich");
+  const CFG = getConfig();
 
-    kintRichDivs.forEach(function (d) {
-      const textNodes = Array.from(d.childNodes).filter(node => node.nodeType === Node.TEXT_NODE);
+  if (!window.BM) window.BM = {};
+  if (!window.BM.log) window.BM.log = {};
+  window.BM.log.color1 ||= 'background:#139ad0;color:#fff;padding:2px 6px;border-radius:3px;';
+  window.BM.log.color2 ||= 'background:#f1f9ff;color:#139ad0;padding:2px 6px;border-radius:3px;';
 
-      textNodes.forEach(node => {
-        if (node.textContent.trim() === ':') {
-          // Remove the text node if it only contains ": "
-          node.remove();
-        }
-      });
-    });
+  const STATE = {
+    installed: false,
+    errors: [],
+    observer: null,
+    inHandler: false,
+    overlays: [],
+    overlayCount: 0,
+    hardDisabled: false,
+    orig: {}
+  };
 
-    function removeCharactersFromTextNodes(element, charactersToRemove) {
-      const childNodes = element.childNodes;
-      childNodes.forEach((node) => {
-        if (node.nodeType === Node.TEXT_NODE) {
-          // Replace characters in text node
-          node.nodeValue = node.nodeValue.replace(charactersToRemove, '');
-        }
-        // else if (node.nodeType === Node.ELEMENT_NODE) {
-        //   // Recursively handle child elements
-        //   removeCharactersFromTextNodes(node, charactersToRemove);
-        // }
-      });
+  const OVERLAY_LIMIT = 4;
 
+  function nowIso() {
+    return new Date().toISOString();
+  }
+
+  function normalizeStack(stack) {
+    if (!stack) return '';
+    return String(stack)
+      .split('\n')
+      .filter(l =>
+        !l.includes('bm-debug.js') &&
+        !l.includes('captureAndReport') &&
+        !l.includes('installGlobalHandlers')
+      )
+      .slice(0, CFG.trace.maxFrames)
+      .join('\n');
+  }
+
+  function captureTrace(skip = 0) {
+    try {
+      return normalizeStack(new Error().stack.split('\n').slice(2 + skip).join('\n'));
+    } catch {
+      return '';
     }
   }
-}
 
+  function escapeHtml(s) {
+    return String(s)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#039;');
+  }
 
-if (window.BM === undefined) {
-  window['BM'] = {}
-}
-window.BM['BMDebug'] = new BMDebug();
+  function looksNoisy(message) {
+    return CFG.noisyPatterns.some(p => String(message || '').includes(p));
+  }
 
-/**
- * endpoint error handler when all previous fail.
- */
-window.addEventListener('error', function (event) {
-  // Prevent the default browser error handling
-  event.preventDefault();
+  function toPlainError(err) {
+    if (!err) return { name: 'Error', message: '', stack: '' };
+    if (typeof err === 'string') return { name: 'Error', message: err, stack: '' };
+    return { name: err.name || 'Error', message: err.message || String(err), stack: err.stack || '' };
+  }
 
-  let message = parseBrokenKint(event.message);
+  function safeJson(data) {
+    try {
+      return JSON.stringify(data, null, 2);
+    } catch {
+      return '';
+    }
+  }
 
-  // Format the error message
-  let stack="";
-  if(event.error)stack=event.error.stack;
-  const errorMessage = `
-        <h2>Blue Marloc detected an error</h2>
-        <p><strong>Message:</strong> ${message}</p>
+  function renderOverlay(entry) {
+    if (!CFG.overlay) return;
+    if (STATE.overlayCount >= OVERLAY_LIMIT) return;
 
-        <p><strong>File:</strong> ${event.filename}</p>
-        <p><strong>Line:</strong> ${event.lineno}</p>
-        <p><strong>Column:</strong> ${event.colno}</p>
-        <p><details><summary></summary>${stack}</details></p>
+    const idx = STATE.overlayCount++;
+    const el = document.createElement('div');
 
+    el.style.position = 'fixed';
+    el.style.top = 80 + idx * 30 + 'px';
+    el.style.left = 80 + idx * 30 + 'px';
+    el.style.width = '800px';
+    el.style.maxHeight = '75vh';
+    el.style.overflow = 'auto';
+    el.style.zIndex = 2147483647 - idx;
+    el.style.background = '#f1f9ff';
+    el.style.border = '2px solid #139ad0';
+    el.style.borderRadius = '10px';
+    el.style.padding = '16px';
+    el.style.cursor = 'move';
+    el.style.boxShadow = '0 0 18px rgba(0,0,0,.45)';
+
+    el.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <img src="https://bluemarloc.com/bpiofiles/logo_2_500_0.png" alt="Blue Marloc" style="height:34px;">
+          <div>
+            <div style="font-size:18px;font-weight:800;">Blue Marloc detected an error</div>
+            <div style="font-size:12px;opacity:.85;">
+              ${escapeHtml(entry.time)} · ${escapeHtml(entry.type)}
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button data-copy style="padding:6px 10px;border:1px solid #139ad0;background:#fff;border-radius:6px;cursor:pointer;">
+            Copy
+          </button>
+          <button data-close style="padding:6px 10px;border:1px solid #139ad0;background:#fff;border-radius:6px;cursor:pointer;">
+            Close
+          </button>
+        </div>
+      </div>
+
+      <hr style="border:none;border-top:1px solid rgba(19,154,208,.3);margin:12px 0;">
+
+      <details open>
+        <summary style="cursor:pointer;font-weight:700;">Message</summary>
+        <pre style="white-space:pre-wrap;margin:6px 0 0 0;">${escapeHtml(entry.message)}</pre>
+      </details>
+
+      ${entry.stack ? `
+        <details>
+          <summary style="cursor:pointer;font-weight:700;">Stack</summary>
+          <pre style="white-space:pre-wrap;">${escapeHtml(entry.stack)}</pre>
+        </details>` : ''}
+
+      ${entry.trace ? `
+        <details>
+          <summary style="cursor:pointer;font-weight:700;">Trace</summary>
+          <pre style="white-space:pre-wrap;">${escapeHtml(entry.trace)}</pre>
+        </details>` : ''}
+
+      <details>
+        <summary style="cursor:pointer;font-weight:700;">Context</summary>
+        <pre style="white-space:pre-wrap;">${escapeHtml(safeJson(entry.context))}</pre>
+      </details>
     `;
 
-  // Create the dialog container
-  const dialogContainer = document.createElement('div');
-  dialogContainer.style.position = 'fixed';
-  dialogContainer.style.top = '50%';
-  dialogContainer.style.left = '50%';
-  dialogContainer.style.transform = 'translate(-50%, -50%)';
-  dialogContainer.style.backgroundColor = '#f1f9ff';
-  dialogContainer.style.padding = '20px';
-  dialogContainer.style.border = '2px solid #139ad0';
-  dialogContainer.style.zIndex = '10000';
-  dialogContainer.style.maxWidth = '80%';
-  dialogContainer.style.boxShadow = '0px 0px 15px rgba(0,0,0,0.5)';
-  dialogContainer.style.maxHeight = '80%';
-  dialogContainer.style.overflow = 'auto';
+    document.body.appendChild(el);
+    STATE.overlays.push(el);
 
-  // Add the error message to the dialog
-  dialogContainer.innerHTML = errorMessage;
+    el.querySelector('[data-close]').onclick = () => el.remove();
+    el.querySelector('[data-copy]').onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(safeJson(entry));
+      } catch (e) {}
+    };
 
-  // Create a close button
-  const closeButton = document.createElement('button');
-  closeButton.innerText = 'Close';
-  closeButton.style.marginTop = '10px';
-  closeButton.onclick = function () {
-    document.body.removeChild(dialogContainer);
+    let sx = 0, sy = 0, ox = 0, oy = 0, dragging = false;
+
+    el.addEventListener('mousedown', (e) => {
+      if (e.target.tagName === 'BUTTON') return;
+      dragging = true;
+      sx = e.clientX;
+      sy = e.clientY;
+      const r = el.getBoundingClientRect();
+      ox = r.left;
+      oy = r.top;
+      e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!dragging) return;
+      el.style.left = ox + (e.clientX - sx) + 'px';
+      el.style.top = oy + (e.clientY - sy) + 'px';
+    });
+
+    document.addEventListener('mouseup', () => dragging = false);
+  }
+
+  function captureAndReport(type, errLike, context) {
+    if (!CFG.enabled || STATE.inHandler || STATE.hardDisabled) return;
+
+    try {
+      STATE.inHandler = true;
+
+      const err = toPlainError(errLike);
+      if (looksNoisy(err.message)) return;
+
+      const entry = {
+        time: nowIso(),
+        type,
+        message: err.message,
+        stack: normalizeStack(err.stack),
+        trace: CFG.trace.enabled ? captureTrace(1) : '',
+        context: context || {}
+      };
+
+      STATE.errors.push(entry);
+
+      console.groupCollapsed('%c BMDebug %c ' + type, window.BM.log.color1, window.BM.log.color2);
+      console.log(entry);
+      console.groupEnd();
+
+      renderOverlay(entry);
+
+      if (STATE.overlayCount >= OVERLAY_LIMIT) {
+        STATE.hardDisabled = true;
+        CFG.enabled = false;
+      }
+    } finally {
+      STATE.inHandler = false;
+    }
+  }
+
+  window.addEventListener('error', function (e) {
+    try { e.preventDefault(); } catch {}
+    captureAndReport('window.error', e.error || e.message, { source: 'window' });
+  }, true);
+
+  window.addEventListener('unhandledrejection', function (e) {
+    try { e.preventDefault(); } catch {}
+    captureAndReport('unhandledrejection', e.reason, { source: 'promise' });
+  }, true);
+
+  if (!window.BM.BMDebug) {
+    window.BM.BMDebug = {
+      install() {},
+      report: captureAndReport,
+      resetLimiter() {
+        STATE.overlayCount = 0;
+        STATE.hardDisabled = false;
+        CFG.enabled = true;
+      }
+    };
+  }
+
+  Drupal.behaviors.bm_debug = {
+    attach(context) {
+      once('bm-debug-init', 'html', context).forEach(() => {});
+    }
   };
 
-  // Append the close button to the dialog
-  dialogContainer.appendChild(closeButton);
-
-  // Append the dialog to the body
-  document.body.appendChild(dialogContainer);
-});
-
-function parseBrokenKint(logText) {
-
-  // proceed only when it is a failed Kint interpretation
-  if (logText.indexOf('Uncaught AjaxError:') === -1) {
-    return logText
-  }
-
-
-  // Split the log text into embedded js/css and the markup
-  const htmlFragment = logText.split('.kint-highlight{background:#f0eb96}');
-  return htmlFragment[1];// the message without script and css pre-amble
-
-  /*
-   not working, trying reinit kint on the message, but no luck yet
-   * @type {HTMLDivElement}
-
-  const kintContainer = document.createElement('div');
-  kintContainer.id='kintContainer';
-
-  kintContainer.innerHTML = htmlFragment[1];
-  document.body.appendChild(kintContainer);
-
-  // Dynamically load Kint CSS and JavaScript
-  const kintCSS = document.createElement('link');
-  kintCSS.rel = 'stylesheet';
-  kintCSS.href = '/modules/custom/bm_debug/css/aante-light.css';
-  document.head.appendChild(kintCSS);
-
-  // Dynamically load Kint shared.js
-  const sharedJS = document.createElement('script');
-  sharedJS.src =  '/modules/custom/bm_debug/js/shared.js' // Replace with the correct path to shared.js
-  sharedJS.onload = () => {
-    console.log('Kint shared.js loaded')
-
-    // Dynamically load Kint rich.js
-    const richJS = document.createElement('script')
-    richJS.src =  '/modules/custom/bm_debug/js/rich.js' // Replace with the correct path to rich.js
-    richJS.onload = () => {
-      console.log('Kint rich.js loaded')
-      initializeKintRich()
-    }
-    document.head.appendChild(richJS)
-  }
-  document.head.appendChild(sharedJS)
-
-
-   Kint.init(kintContainer);
-
-   */
-
-}
-
-function initializeKintRich() {
-  if (typeof kintRich !== 'undefined' && kintRich.init) {
-    const kintContainers = document.querySelectorAll('.kint-rich'); // Target
-                                                                    // Kint
-                                                                    // rich
-                                                                    // dumps
-    kintContainers.forEach((container) => {
-      try {
-        kintRich.init(container); // Initialize rich mode for each container
-      }
-      catch (e) {
-        console.error('Error initializing Kint rich mode:', e);
-      }
-    });
-  }
-  else {
-    console.error('kintRich is not defined or initialization function is missing.');
-  }
-}
+})(Drupal, once, drupalSettings);
