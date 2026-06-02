@@ -1,4 +1,4 @@
-name: Mondial-IT Debug
+name: MIT Debug
 type: module
 description: Debug api with centralised management of debugging. `bm_d` instruction, which can be selectively enabled and disabled from the GUI.
 package: Mondial-IT
